@@ -214,6 +214,12 @@ fn status_key(status: &PowerStatus) -> (u8, u8, u8) {
 fn batteries_key(batteries: &[Battery]) -> Vec<(String, i32, bool)> {
     batteries
         .iter()
-        .map(|b| (b.state.clone(), b.percentage.round() as i32, b.smart_charging))
+        .map(|b| {
+            (
+                b.state.clone(),
+                b.percentage.round() as i32,
+                b.smart_charging,
+            )
+        })
         .collect()
 }
