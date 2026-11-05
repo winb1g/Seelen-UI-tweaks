@@ -15,6 +15,7 @@ See **[FORK.md](../FORK.md#features)** for the list of changes. Highlights:
 
 - **Dock: per-app volume.** Scroll over a dock app to change its volume, ctrl+click to mute it.
 - **Dock: mouse wheel works** without Windows' _Scroll inactive windows_ setting.
+- **Battery: charging bolt shows up** reliably when the charger is plugged in (toolbar and dock).
 - **Self-updates from this fork** (every merge is a release).
 
 ## Install

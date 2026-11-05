@@ -43,15 +43,16 @@ Docs: [first-time setup](fork/docs/first-time-setup.md) · [releasing](fork/docs
 
 ## Hooks into upstream files
 
-| Upstream file                                                   | Hook                                                     | Feature                         |
-| --------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------- |
-| `src/background/main.rs`                                        | `#[path = "../../fork/background/mod.rs"]` + `mod fork;` | [Backend entry](#backend-entry) |
-| `src/background/main.rs`                                        | `fork::init();` at the end of `setup`                    | [Backend entry](#backend-entry) |
-| `src/ui/svelte/weg/components/items/UserApplicationItem.svelte` | `{@attach appVolumeControls(` + import, on `.weg-item`   | [App volume](#app-volume)       |
-| `src/background/utils/updater.rs`                               | `crate::fork::release::SIGN_PUB_KEY`                     | [Releases](#releases)           |
-| `src/background/utils/updater.rs`                               | `crate::fork::release::NIGHTLY_ENDPOINT`                 | [Releases](#releases)           |
-| `src/background/utils/updater.rs`                               | `crate::fork::release::RELEASE_ENDPOINT`                 | [Releases](#releases)           |
-| `src/background/utils/integrity/checksums.rs`                   | `crate::fork::release::SIGN_PUB_KEY`                     | [Releases](#releases)           |
+| Upstream file                                                   | Hook                                                     | Feature                           |
+| --------------------------------------------------------------- | -------------------------------------------------------- | --------------------------------- |
+| `src/background/main.rs`                                        | `#[path = "../../fork/background/mod.rs"]` + `mod fork;` | [Backend entry](#backend-entry)   |
+| `src/background/main.rs`                                        | `fork::init();` at the end of `setup`                    | [Backend entry](#backend-entry)   |
+| `src/ui/svelte/weg/components/items/UserApplicationItem.svelte` | `{@attach appVolumeControls(` + import, on `.weg-item`   | [App volume](#app-volume)         |
+| `src/background/utils/updater.rs`                               | `crate::fork::release::SIGN_PUB_KEY`                     | [Releases](#releases)             |
+| `src/background/utils/updater.rs`                               | `crate::fork::release::NIGHTLY_ENDPOINT`                 | [Releases](#releases)             |
+| `src/background/utils/updater.rs`                               | `crate::fork::release::RELEASE_ENDPOINT`                 | [Releases](#releases)             |
+| `src/background/utils/integrity/checksums.rs`                   | `crate::fork::release::SIGN_PUB_KEY`                     | [Releases](#releases)             |
+| `src/background/modules/power/mod.rs`                           | `pub(crate) mod application;`                            | [Charging state](#charging-state) |
 
 The first `code span` of the _Hook_ column must appear verbatim in the file: CI fails when an upstream merge drops it.
 
@@ -112,3 +113,13 @@ areas are click-through, so the wheel over them still reaches the apps behind.
 - **Scroll** changes the app volume in 5% steps.
 - **Ctrl+click** mutes / unmutes the app (the normal click action is skipped).
 - The **tooltip** shows `Volume: N%`, `Muted` or `No audio session` while doing so, until the pointer leaves.
+
+### Charging state
+
+[`fork/background/power_sync.rs`](fork/background/power_sync.rs) — fixes the toolbar/dock battery item not showing the
+charging bolt when the charger is plugged in. Upstream only refreshes the AC status from a window broadcast, gives up
+without sending it if the battery read fails mid-switch, and reads the battery state only once at that moment (it
+reports _charging_ a moment later, and with a charge limit or a full battery the percentage never changes again). The
+fork also listens to the AC/DC power source notification directly, re-reads the power status and batteries 2, 5 and 15
+seconds after each change, and every 30 seconds as a safety net, feeding any difference into upstream's power module so
+the widgets update as usual.
