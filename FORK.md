@@ -115,8 +115,8 @@ areas are click-through, so the wheel over them still reaches the apps behind.
 
 ### UAC prompts
 
-[`fork/background/uac_prompt.rs`](fork/background/uac_prompt.rs) — when the program asking for elevation isn't in
-the foreground (e.g. an installer started by winget in a terminal), Windows parks the UAC prompt as a flashing taskbar
+[`fork/background/uac_prompt.rs`](fork/background/uac_prompt.rs) — when the program asking for elevation isn't in the
+foreground (e.g. an installer started by winget in a terminal), Windows parks the UAC prompt as a flashing taskbar
 button instead of showing it. Seelen UI hides the native taskbar and its dock skips `consent.exe` (it runs as SYSTEM),
 so the prompt was unreachable. Any `consent.exe` window that appears on the user's desktop is a parked prompt (normal
 ones live on the secure desktop), so it is activated once, through the elevated SLU service when needed, and the prompt
