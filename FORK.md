@@ -112,3 +112,13 @@ areas are click-through, so the wheel over them still reaches the apps behind.
 - **Scroll** changes the app volume in 5% steps.
 - **Ctrl+click** mutes / unmutes the app (the normal click action is skipped).
 - The **tooltip** shows `Volume: N%`, `Muted` or `No audio session` while doing so, until the pointer leaves.
+
+### UAC prompts
+
+[`fork/background/uac_prompt.rs`](fork/background/uac_prompt.rs) — when the program asking for elevation isn't in the
+foreground (e.g. an installer started by winget in a terminal), Windows parks the UAC prompt as a flashing taskbar
+button instead of showing it. Seelen UI hides the native taskbar and its dock skips `consent.exe` (it runs as SYSTEM),
+so the prompt was unreachable. Any `consent.exe` window that appears on the user's desktop is a parked prompt (normal
+ones live on the secure desktop), so it is activated once, through the elevated SLU service when needed, and the prompt
+shows as usual. No upstream hook: it reuses the existing `SvcAction::SetForeground`. More prompt hosts can be added to
+`PROMPT_HOSTS`.

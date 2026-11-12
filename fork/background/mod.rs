@@ -4,8 +4,10 @@
 //! the end of the app setup (see FORK.md).
 
 pub mod release;
+mod uac_prompt;
 mod wheel_bridge;
 
 pub fn init() {
     wheel_bridge::start();
+    uac_prompt::start();
 }
