@@ -34,7 +34,12 @@ Docs: [first-time setup](fork/docs/first-time-setup.md) · [releasing](fork/docs
   ```bash
   git fetch upstream
   git merge upstream/master
+  node fork/scripts/reapply-hooks.ts  # only if the merge conflicts
   ```
+
+  A hook file conflicts when upstream edits the lines next to a hook. `reapply-hooks.ts` resolves it by taking
+  upstream's version and putting the hooks back; `fork-sync.yml` runs it on its own and only fails when something else
+  conflicts.
 
 - After every upstream merge:
   - CI checks that every hook below still exists (`node fork/scripts/fork-check.ts hooks`).
@@ -54,6 +59,9 @@ Docs: [first-time setup](fork/docs/first-time-setup.md) · [releasing](fork/docs
 | `src/background/utils/integrity/checksums.rs`                   | `crate::fork::release::SIGN_PUB_KEY`                     | [Releases](#releases)           |
 
 The first `code span` of the _Hook_ column must appear verbatim in the file: CI fails when an upstream merge drops it.
+Every file in this table needs a recipe in [`fork/scripts/reapply-hooks.ts`](fork/scripts/reapply-hooks.ts) that puts
+its hooks back after a conflict (the fork tests fail otherwise). Check it with
+`node fork/scripts/reapply-hooks.ts check upstream/master`.
 
 ## Upstream patches
 

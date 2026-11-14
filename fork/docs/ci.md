@@ -10,7 +10,7 @@ reused untouched (so they improve with every upstream merge), and the fork only 
 | `ci.yml` (upstream, enabled, never edited)                     | Every PR, every release      | `deno fmt` / `deno lint` / `tsc` / `cargo fmt` / `clippy -D warnings` / `cargo test` over the **whole** repo, fork code included (it's compiled into the app). |
 | [`fork-ci.yml`](../../.github/workflows/fork-ci.yml)           | Every PR, every release      | Fork rules + fork tests, below.                                                                                                                                |
 | [`fork-release.yml`](../../.github/workflows/fork-release.yml) | Merge into `master`          | Runs both of the above, then builds ([releasing.md](releasing.md)).                                                                                            |
-| [`fork-sync.yml`](../../.github/workflows/fork-sync.yml)       | 1st of every month / by hand | Opens a `sync/upstream-*` PR, on which both CIs run against the merged result.                                                                                 |
+| [`fork-sync.yml`](../../.github/workflows/fork-sync.yml)       | 1st of every month / by hand | Opens a `sync/upstream-*` PR, on which both CIs run against the merged result. Re-applies hooks on conflicted hook files.                                      |
 
 ## Fork checks ([`fork/scripts/fork-check.ts`](../scripts/fork-check.ts))
 
@@ -47,4 +47,8 @@ When the sync PR is open:
 3. Merge with **Create a merge commit**, never squash or rebase: that keeps upstream's history, so the next merge only
    brings new commits.
 
-On conflicts the run fails and its summary lists the files and the commands to resolve them locally.
+When upstream edits the lines next to a fork hook, the merge conflicts on that file. The run then calls
+[`reapply-hooks.ts`](../scripts/reapply-hooks.ts): it takes upstream's version of each conflicted hook file and puts the
+hooks back with that file's recipe, and the PR body lists the files it fixed. It leaves files listed under _Upstream
+patches_, files deleted upstream, files with no recipe and recipes whose anchor upstream moved. If any conflict remains,
+the run fails and its summary lists the files, why, and the commands to resolve them locally.
