@@ -38,6 +38,10 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.FORK_SYNC_TOKEN }}
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
       - name: Merge upstream into a sync branch
         env:
           GH_TOKEN: ${{ secrets.FORK_SYNC_TOKEN }}
@@ -61,27 +65,37 @@ jobs:
 
           branch="sync/upstream-$(date -u +%Y-%m-%d)"
           git switch -c "$branch"
+          report="$RUNNER_TEMP/reapply-hooks.md"
+          : > "$report"
           if ! git merge --no-edit -m "chore(sync): merge upstream/master" upstream/master; then
-            {
-              echo "## Upstream merge has conflicts"
-              echo
-              git diff --name-only --diff-filter=U | sed 's/^/- `/; s/$/`/'
-              echo
-              echo 'Resolve locally (see FORK.md > Workflow):'
-              echo
-              echo '```bash'
-              echo "git switch -c $branch origin/master"
-              echo 'git fetch upstream && git merge upstream/master'
-              echo '```'
-            } | tee -a "$GITHUB_STEP_SUMMARY"
-            git merge --abort
-            exit 1
+            # Upstream edited lines next to a fork hook: take upstream's version of those files and re-apply the hooks.
+            if node fork/scripts/reapply-hooks.ts > "$report"; then
+              git commit -m "chore(sync): merge upstream/master" -m "$(cat "$report")"
+              cat "$report" >> "$GITHUB_STEP_SUMMARY"
+            else
+              {
+                echo "## Upstream merge has conflicts"
+                echo
+                cat "$report"
+                echo 'Resolve locally (see FORK.md > Workflow):'
+                echo
+                echo '```bash'
+                echo "git switch -c $branch origin/master"
+                echo 'git fetch upstream && git merge upstream/master'
+                echo 'node fork/scripts/reapply-hooks.ts'
+                echo '```'
+              } | tee -a "$GITHUB_STEP_SUMMARY"
+              git merge --abort
+              exit 1
+            fi
           fi
 
           git push origin "$branch"
           gh pr create --base master --head "$branch" \
             --title "chore(sync): merge upstream $(date -u +%Y-%m-%d)" \
             --body "Monthly merge of [upstream](https://github.com/eythaann/Seelen-UI) \`master\` (\`$(git rev-parse --short upstream/master)\`).
+
+          $(cat "$report")
 
           Before merging:
           - [ ] Upstream CI and Fork CI are green (fork hooks still in place).

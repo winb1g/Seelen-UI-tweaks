@@ -59,7 +59,7 @@ pub fn show_outdated_dialog(app: &tauri::AppHandle) -> Result<()> {
 
 fn open_webview2_download() -> Result<()> {
     let url = "https://developer.microsoft.com/en-us/microsoft-edge/webview2/?form=MA13LH#download";
-    crate::windows_api::WindowsApi::execute(url.to_string(), None, None, false)
+    crate::platform::shell::open(url)
 }
 
 /// Try creating a webview window, tauri for some reason could panic stopping the setup hook and for some reason
@@ -78,7 +78,7 @@ pub async fn check_for_webview_optimal_state() -> bool {
         )
         .visible(false)
         .build()?;
-        window.hwnd()?; // build could not fail so we check for the handle.
+        crate::widgets::webview::native_window(&window)?; // build could not fail so we check for the handle.
         window.destroy()?; // close the fake window
         let _ = tx.send(());
         Result::Ok(())

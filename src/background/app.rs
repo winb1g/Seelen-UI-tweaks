@@ -1,8 +1,5 @@
-use std::sync::atomic::Ordering;
-
 use slu_ipc::messages::SvcAction;
 use tauri::{AppHandle, Emitter, Wry};
-use windows::Win32::System::TaskScheduler::{ITaskService, TaskScheduler};
 
 use seelen_core::state::shortcuts::resolve_shortcuts;
 
@@ -10,23 +7,18 @@ use crate::{
     APP_HANDLE,
     cli::ServicePipe,
     error::{Result, ResultLogExt},
-    hook::register_win_hook,
     migrations::Migrations,
-    modules::{
-        clipboard::infrastructure::init_clipboard_manager, start::application::StartMenuManager,
-        user::infrastructure::reemit_user,
-    },
+    platform::{self, startup},
     resources::RESOURCES,
-    session::infrastructure::reemit_session,
-    state::application::{AppSettings, FULL_STATE, initialize_user_resources_watcher},
+    session::reemit_session,
+    state::{AppSettings, FULL_STATE, initialize_user_resources_watcher},
+    system_modules::{
+        clipboard::init_clipboard_manager, start::StartMenuManager, user::reemit_user,
+    },
     utils::discord::{start_discord_rpc, update_discord_rpc},
     widgets::{
         manager::WIDGET_MANAGER, popups::shortcut_conflicts::show_shortcut_conflict_popup,
         weg::SeelenWeg,
-    },
-    windows_api::{
-        Com,
-        event_window::{IS_INTERACTIVE_SESSION, create_background_window},
     },
 };
 
@@ -41,7 +33,7 @@ pub fn emit_to_webviews<S>(event: &str, payload: S)
 where
     S: serde::Serialize,
 {
-    if !IS_INTERACTIVE_SESSION.load(Ordering::Acquire) {
+    if !crate::platform::session::is_interactive() {
         return;
     }
 
@@ -100,8 +92,7 @@ impl SeelenUI {
         }
 
         WIDGET_MANAGER.reconcile()?;
-        create_background_window()?;
-        register_win_hook()?;
+        platform::start()?;
 
         std::thread::spawn(init_clipboard_manager);
 
@@ -147,23 +138,7 @@ impl SeelenUI {
     }
 
     pub fn is_auto_start_enabled() -> Result<bool> {
-        Com::run_with_context(|| unsafe {
-            let task_service: ITaskService = Com::create_instance(&TaskScheduler)?;
-            task_service.Connect(
-                &Default::default(),
-                &Default::default(),
-                &Default::default(),
-                &Default::default(),
-            )?;
-            let is_task_enabled = task_service
-                .GetFolder(&"\\Seelen".into())
-                .and_then(|folder| folder.GetTask(&"Seelen UI Service".into()))
-                .and_then(|task| task.Definition())
-                .and_then(|definition| definition.Triggers())
-                .and_then(|triggers| triggers.get_Item(1))
-                .is_ok();
-            Ok(is_task_enabled)
-        })
+        startup::is_enabled()
     }
 
     pub fn set_auto_start(enabled: bool) -> Result<()> {

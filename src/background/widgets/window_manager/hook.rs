@@ -1,17 +1,13 @@
-use seelen_core::{resource::WidgetId, state::WmDragBehavior};
-use windows::Win32::{Foundation::HWND, UI::WindowsAndMessaging::HWND_TOP};
+use seelen_core::{resource::WidgetId, state::WmDragBehavior, system_state::ZOrder};
 
 use crate::{
     error::{Result, ResultLogExt},
-    state::application::FULL_STATE,
-    virtual_desktops::{MINIMIZED_BY_WORKSPACES, events::VirtualDesktopEvent},
+    platform::{hook::WindowEvent, window::Window},
+    state::FULL_STATE,
+    virtual_desktops::{MINIMIZED_BY_WORKSPACES, VdManager, VirtualDesktopEvent},
     widgets::{
         manager::WIDGET_MANAGER,
         window_manager::state_v2::{MINIMIZED_BY_STACK, TwmState, TwmStateEvent, WM_STATE},
-    },
-    windows_api::{
-        WindowsApi,
-        window::{Window, event::WinEvent},
     },
 };
 
@@ -107,7 +103,7 @@ impl WindowManagerV2 {
     fn bring_layout_to_front(focused: &Window, tiled: &[isize]) {
         for &hwnd in tiled {
             if hwnd != focused.address() {
-                WindowsApi::set_z_order(HWND(hwnd as _), focused.hwnd()).log_error();
+                Window::from(hwnd).place_below(focused).log_error();
             }
         }
 
@@ -123,13 +119,13 @@ impl WindowManagerV2 {
             });
 
         for hwnd in overlays {
-            WindowsApi::set_z_order(HWND(hwnd as _), HWND_TOP).log_error();
+            Window::from(hwnd).set_z_order(ZOrder::Top).log_error();
         }
     }
 
-    pub fn process_win_event(event: WinEvent, window: Window) -> Result<()> {
+    pub fn process_window_event(event: WindowEvent, window: Window) -> Result<()> {
         match event {
-            WinEvent::SystemForeground => {
+            WindowEvent::Foregrounded => {
                 let mut state = WM_STATE.lock();
                 if state.pending_reservation.is_some() {
                     state.cancel_reservation();
@@ -151,14 +147,14 @@ impl WindowManagerV2 {
 
                 Self::bring_layout_to_front(&window, &tiled);
             }
-            WinEvent::SynThrottledForegroundRectChange => {
+            WindowEvent::ForegroundRectChanged => {
                 Self::synthetic_foreground_location_change(&window)?;
             }
-            WinEvent::SystemMoveSizeEnd => {
+            WindowEvent::MoveSizeEnded => {
                 Self::system_move_size_end(&window)?;
                 Self::force_retiling()?;
             }
-            WinEvent::SystemMinimizeStart => {
+            WindowEvent::Minimized => {
                 if MINIMIZED_BY_WORKSPACES.contains_sync(&window.address()) {
                     return Ok(());
                 }
@@ -186,7 +182,7 @@ impl WindowManagerV2 {
             }
             VirtualDesktopEvent::WindowAdded { window, desktop } => {
                 let window = &Window::from(window);
-                if !state.is_managed(window) && Self::should_be_managed(window.hwnd()) {
+                if !state.is_managed(window) && Self::should_be_managed(window) {
                     state.add_to_layout(window, &desktop);
                     TwmState::send(TwmStateEvent::Changed);
                 }
@@ -215,8 +211,8 @@ impl WindowManagerV2 {
                 let window = &Window::from(window);
                 if state.is_managed(window) {
                     state.set_stack_active_window(window)?;
-                } else if Self::should_be_managed(window.hwnd()) {
-                    let desktop = window.workspace_id()?;
+                } else if Self::should_be_managed(window) {
+                    let desktop = VdManager::instance().workspace_of(window)?;
                     state.add_to_layout(window, &desktop);
                     TwmState::send(TwmStateEvent::Changed);
                 }

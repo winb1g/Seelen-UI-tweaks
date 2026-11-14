@@ -5,13 +5,15 @@ use seelen_core::{
     state::{WegItem, WegItemData},
     system_state::UserAppWindow,
 };
-use windows::Win32::UI::WindowsAndMessaging::SW_MINIMIZE;
 
 use crate::{
     error::Result,
-    modules::apps::application::USER_APPS_MANAGER,
-    state::application::WEG_ITEMS_MANAGER,
-    windows_api::{WindowsApi, window::Window},
+    platform::{
+        shell,
+        window::{Window, WindowState},
+    },
+    state::WEG_ITEMS_MANAGER,
+    system_modules::apps::UserAppsManager,
 };
 
 /// Mirrors `getWindowsForItem` from the frontend (`windows.ts`).
@@ -73,7 +75,7 @@ pub fn process(cmd: WegCli) -> Result<()> {
             return Ok(());
         };
 
-        let interactables = USER_APPS_MANAGER.interactable_windows.to_vec();
+        let interactables = UserAppsManager::instance().interactable_windows.to_vec();
         let windows = get_windows_for_item(inner_data, &interactables);
 
         if windows.is_empty() {
@@ -91,11 +93,11 @@ pub fn process(cmd: WegCli) -> Result<()> {
                 .relaunch
                 .as_ref()
                 .and_then(|r| r.working_dir.clone());
-            WindowsApi::execute(command, args, working_dir, false)?;
+            shell::execute(&command, args.as_deref(), working_dir.as_deref(), false)?;
         } else {
             let focused = windows.iter().find(|w| Window::from(w.hwnd).is_focused());
             if let Some(w) = focused {
-                Window::from(w.hwnd).show_window_async(SW_MINIMIZE)?;
+                Window::from(w.hwnd).set_state_async(WindowState::Minimized)?;
             } else if let Some(w) = windows.first() {
                 let window = Window::from(w.hwnd);
                 if window.is_window() {

@@ -3,10 +3,11 @@ use slu_ipc::{IPC, ServiceIpc, messages::SvcAction};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
 use crate::{
-    app::get_app_handle, error::Result, state::application::FULL_STATE, utils::has_fixed_runtime,
+    app::get_app_handle,
+    error::Result,
+    platform::info::{has_fixed_runtime, is_running_as_appx},
+    state::FULL_STATE,
 };
-
-use super::is_running_as_appx;
 
 pub static SIGN_PUB_KEY: &str = crate::fork::release::SIGN_PUB_KEY;
 

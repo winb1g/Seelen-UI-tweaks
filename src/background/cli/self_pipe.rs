@@ -8,8 +8,11 @@ use slu_ipc::{
 use crate::{
     cli::{process_app_command, uri::process_uri},
     error::{Result, ResultLogExt},
-    modules::{apps::application::WindowBadges, system_tray::SystemTrayManager},
+    system_modules::system_tray::SystemTrayManager,
 };
+
+#[cfg(windows)]
+use crate::windows_api::window_badges::WindowBadges;
 
 pub struct SelfPipe;
 impl SelfPipe {
@@ -62,6 +65,8 @@ impl SelfPipe {
             AppMessage::TrayChanged(event) => {
                 SystemTrayManager::handle_tray_event(event);
             }
+            // sent by the hook injected in explorer (`ITaskbarList3` calls), Windows only
+            #[cfg(windows)]
             AppMessage::TaskbarButtonChanged(event) => {
                 WindowBadges::instance().process_event(event);
             }

@@ -11,16 +11,18 @@ use seelen_core::{
         NodeId, TwmGlobalRuntimeTree, TwmRuntimeTree, WindowLocation, WorkspaceId,
         twm::{TwmNodeKind, TwmPlugin, TwmReservation, TwmStackPolicy},
     },
+    system_state::ZOrder,
 };
-use windows::Win32::UI::WindowsAndMessaging::{HWND_TOP, SW_FORCEMINIMIZE, SW_SHOWNOACTIVATE};
 
 use crate::{
     app::emit_to_webviews,
     error::{Result, ResultLogExt},
     event_manager,
-    hook::HookManager,
-    modules::apps::application::UserAppsManager,
-    state::application::FULL_STATE,
+    platform::hook::HookManager,
+    platform::monitor::Monitor,
+    platform::window::{Window, WindowState},
+    state::FULL_STATE,
+    system_modules::apps::UserAppsManager,
     utils::lock_free::TracedMutex,
     virtual_desktops::VdManager,
     widgets::window_manager::{
@@ -28,7 +30,6 @@ use crate::{
         cli::{Axis, Direction, StepWay},
         handler::{set_app_window_position, set_app_windows_positions},
     },
-    windows_api::{WindowsApi, monitor::Monitor, window::Window},
 };
 
 pub static MINIMIZED_BY_STACK: LazyLock<scc::HashSet<isize>> = LazyLock::new(scc::HashSet::new);
@@ -81,7 +82,7 @@ impl TwmState {
                     let mut tree = Self::create_tree(&workspace.id);
                     for &hwnd in &workspace.windows {
                         let window = Window::from(hwnd);
-                        if should_be_managed(window.hwnd()) {
+                        if should_be_managed(&window) {
                             let residual = tree.add_to_tiled(window.address());
                             for w in residual {
                                 tree.add_to_floating(w);
@@ -98,7 +99,7 @@ impl TwmState {
         });
 
         HookManager::subscribe(|(event, origin)| {
-            WindowManagerV2::process_win_event(event, origin).log_error()
+            WindowManagerV2::process_window_event(event, origin).log_error()
         });
 
         self.recompute_paused_by_monitor();
@@ -703,19 +704,21 @@ impl TwmState {
                     // only sanitizes visibility, never activates: focus is the caller's job
                     // (see `reveal_stack_window`).
                     if window.is_minimized() {
-                        window.show_window(SW_SHOWNOACTIVATE).log_error();
+                        window.set_state(WindowState::ShownNoActivate).log_error();
                         // a restored window can be drawn above the focused one even without
                         // activation, so keep the focused managed window on top.
                         let foreground = Window::get_foregrounded();
                         if self.is_managed(&foreground) {
-                            WindowsApi::set_z_order(foreground.hwnd(), HWND_TOP).log_error();
+                            foreground.set_z_order(ZOrder::Top).log_error();
                         }
                     }
 
                     for w in &node.windows {
                         if *w != active {
                             let _ = MINIMIZED_BY_STACK.insert_sync(*w);
-                            Window::from(*w).show_window(SW_FORCEMINIMIZE).log_error();
+                            Window::from(*w)
+                                .set_state(WindowState::ForceMinimized)
+                                .log_error();
                         }
                     }
                 }
