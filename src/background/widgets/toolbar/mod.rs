@@ -1,6 +1,4 @@
-pub mod hook;
-
-use crate::{error::Result, state::application::FULL_STATE, windows_api::monitor::Monitor};
+use crate::{error::Result, platform::monitor::Monitor, state::FULL_STATE};
 
 #[allow(dead_code)]
 pub struct FancyToolbar {}

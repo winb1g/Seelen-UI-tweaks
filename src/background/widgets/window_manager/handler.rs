@@ -1,18 +1,17 @@
 use std::{collections::HashMap, sync::Once};
 
 use slu_ipc::messages::SvcAction;
-use windows::Win32::UI::WindowsAndMessaging::SW_NORMAL;
 
 use crate::{
     app::emit_to_webviews,
     cli::ServicePipe,
     error::Result,
-    state::application::{FULL_STATE, performance::PERFORMANCE_MODE},
+    platform::window::{Window, WindowState},
+    state::{FULL_STATE, PERFORMANCE_MODE},
     widgets::{
         permissions::{WidgetPerm, request_widget_permission},
         window_manager::state_v2::{TwmState, WM_STATE},
     },
-    windows_api::{WindowsApi, window::Window},
 };
 use seelen_core::{
     handlers::SeelenEvent,
@@ -29,15 +28,17 @@ fn desired_rect_for(window: &Window, rect: &Rect) -> Result<Option<Rect>> {
     }
 
     if window.is_maximized() {
-        window.show_window(SW_NORMAL)?; // unmaximize
+        window.set_state(WindowState::Normal)?; // unmaximize
     }
 
-    let shadow = WindowsApi::shadow_rect(window.hwnd())?;
+    // the invisible borders (drop shadow) are outside the visible frame
+    let outer = window.outer_rect()?;
+    let inner = window.inner_rect()?;
     Ok(Some(Rect {
-        top: rect.top + shadow.top,
-        left: rect.left + shadow.left,
-        right: rect.right + shadow.right,
-        bottom: rect.bottom + shadow.bottom,
+        top: rect.top + outer.top - inner.top,
+        left: rect.left + outer.left - inner.left,
+        right: rect.right + outer.right - inner.right,
+        bottom: rect.bottom + outer.bottom - inner.bottom,
     }))
 }
 

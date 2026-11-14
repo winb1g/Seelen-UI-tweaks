@@ -4,8 +4,8 @@ use seelen_core::{state::SettingsBackup, system_state::BackupStatus};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    session::application::SessionManager,
-    state::application::{AppSettings, FULL_STATE},
+    session::SessionManager,
+    state::{AppSettings, FULL_STATE},
     utils::constants::SEELEN_COMMON,
 };
 

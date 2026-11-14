@@ -22,8 +22,8 @@ use crate::{
     error::ResultLogExt,
     get_tokio_handle,
     resources::RESOURCES,
-    session::application::SessionManager,
-    state::application::FULL_STATE,
+    session::SessionManager,
+    state::FULL_STATE,
     utils::{constants::SEELEN_COMMON, date_based_hex_id},
     widgets::{show_settings_at, trigger_dialog_backend},
 };

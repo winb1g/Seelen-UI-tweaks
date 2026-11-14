@@ -8,10 +8,7 @@ use discord_rich_presence::{
     activity::{Activity, Assets, Button, Party, Timestamps},
 };
 
-use crate::{
-    error::Result, is_local_dev, state::application::FULL_STATE, utils::now_timestamp_as_millis,
-    windows_api::event_window::IS_INTERACTIVE_SESSION,
-};
+use crate::{error::Result, is_local_dev, state::FULL_STATE, utils::now_timestamp_as_millis};
 
 use super::spawn_named_thread;
 
@@ -118,7 +115,7 @@ pub fn update_discord_rpc(enabled: bool) -> Result<()> {
 
             while DISCORD_IPC_CONNECTED.load(Ordering::SeqCst) {
                 // Pause when session is not interactive to reduce CPU usage
-                if !IS_INTERACTIVE_SESSION.load(Ordering::Acquire) {
+                if !crate::platform::session::is_interactive() {
                     std::thread::sleep(std::time::Duration::from_secs(60));
                     continue;
                 }

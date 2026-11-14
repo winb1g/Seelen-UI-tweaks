@@ -7,14 +7,14 @@ mod backups;
 mod cli;
 mod error;
 mod exposed;
-mod hook;
 mod logger;
 mod migrations;
-mod modules;
+mod platform;
 mod resources;
 mod server;
 mod session;
 mod state;
+mod system_modules;
 mod tauri_context;
 mod tauri_handlers;
 mod tauri_plugins;
@@ -22,6 +22,7 @@ mod telemetry;
 mod utils;
 mod virtual_desktops;
 mod widgets;
+#[cfg(windows)]
 mod windows_api;
 
 #[path = "../../fork/background/mod.rs"]
@@ -37,13 +38,13 @@ use app::SeelenUI;
 use cli::{SelfPipe, ServicePipe, handle_console_client};
 use error::Result;
 use logger::SeelenLogger;
-use session::application::SessionManager;
+use platform::info::{is_running_as_appx, was_installed_using_msix};
+use session::SessionManager;
 use slu_ipc::messages::SvcAction;
 use tauri_handlers::register_invoke_handler;
 use tauri_plugins::register_plugins;
-use utils::{
-    integrity::{is_already_running, print_initial_information, restart_as_appx, warn_if_elevated},
-    is_running_as_appx, was_installed_using_msix,
+use utils::integrity::{
+    is_already_running, print_initial_information, restart_as_appx, warn_if_elevated,
 };
 
 use crate::{app::get_app_handle, error::ResultLogExt, utils::constants::SEELEN_COMMON};
@@ -99,7 +100,8 @@ async fn main() -> std::process::ExitCode {
     app_builder = register_invoke_handler(app_builder);
 
     // if no custom runtime is present, the app will use the installed with the system
-    if let Some(path) = crate::utils::get_fixed_runtime_path() {
+    #[cfg(windows)]
+    if let Some(path) = crate::platform::info::get_fixed_runtime_path() {
         unsafe { std::env::set_var("WEBVIEW2_BROWSER_EXECUTABLE_FOLDER", path) };
     }
 
