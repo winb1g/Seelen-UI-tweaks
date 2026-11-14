@@ -22,17 +22,16 @@ use std::{
 };
 
 use slu_ipc::messages::SvcAction;
-use windows::Win32::UI::WindowsAndMessaging::SW_RESTORE;
 
 use crate::{
     cli::ServicePipe,
     error::{Result, ResultLogExt},
-    hook::HookManager,
-    utils::spawn_named_thread,
-    windows_api::{
-        WindowEnumerator, WindowsApi,
-        window::{Window, event::WinEvent},
+    platform::{
+        hook::{HookManager, WindowEvent},
+        window::Window,
     },
+    utils::spawn_named_thread,
+    windows_api::WindowsApi,
 };
 
 /// System32 executables whose top-level windows on the user's desktop are prompts waiting for the user.
@@ -71,8 +70,8 @@ pub fn start() {
 
     HookManager::subscribe(|(event, window)| {
         let msg = match event {
-            WinEvent::ObjectShow | WinEvent::ObjectUncloaked => PromptMsg::Shown(window.address()),
-            WinEvent::ObjectDestroy => PromptMsg::Destroyed(window.address()),
+            WindowEvent::Shown | WindowEvent::Uncloaked => PromptMsg::Shown(window.address()),
+            WindowEvent::Destroyed => PromptMsg::Destroyed(window.address()),
             _ => return,
         };
         if let Some(queue) = QUEUE.get() {
@@ -81,11 +80,14 @@ pub fn start() {
     });
 
     // a prompt parked before Seelen UI started
-    WindowEnumerator::new()
-        .for_each(|window| {
-            let _ = sender.send(PromptMsg::Shown(window.address()));
-        })
-        .log_error();
+    match Window::enumerate() {
+        Ok(windows) => {
+            for window in windows {
+                let _ = sender.send(PromptMsg::Shown(window.address()));
+            }
+        }
+        Err(err) => log::error!("Could not enumerate windows: {err:?}"),
+    }
 }
 
 enum PromptMsg {
@@ -98,7 +100,7 @@ fn is_parked_prompt(window: &Window) -> bool {
         && window.is_visible()
         && !window.is_cloaked()
         && window.parent().is_none()
-        && is_prompt_host(window.process().id())
+        && is_prompt_host(window.process_id())
 }
 
 /// Matched by image path, read without opening the process (we are not allowed to open SYSTEM processes).
@@ -123,10 +125,8 @@ fn is_prompt_host(process_id: u32) -> bool {
 }
 
 fn surface(window: &Window) -> Result<()> {
-    if window.is_minimized() {
-        // routed through the elevated service, we can't open the prompt's process
-        window.show_window(SW_RESTORE)?;
-    }
+    // routed through the elevated service, we can't open the prompt's process
+    window.unminimize()?;
 
     for _ in 0..ACTIVATION_ATTEMPTS {
         if !window.is_window() || window.is_focused() {
