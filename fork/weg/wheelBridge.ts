@@ -11,10 +11,36 @@ import { Widget } from "@seelen-ui/lib";
 const WIN32_WHEEL_DELTA = 120;
 const DOM_WHEEL_DELTA = 100;
 
+// tracked from pointer events so a wheel doesn't have to resolve `:hover` (a style recalculation)
+let hovered: Element | null = null;
+
+document.addEventListener(
+  "pointerover",
+  (e) => {
+    hovered = e.target instanceof Element ? e.target : null;
+  },
+  { capture: true, passive: true },
+);
+
+document.addEventListener(
+  "pointerout",
+  (e) => {
+    // no related target means the pointer left the webview
+    if (!e.relatedTarget) hovered = null;
+  },
+  { capture: true, passive: true },
+);
+
+/** Deepest hovered element, falling back to `:hover` if the tracked one was removed from the DOM */
+function getHovered(): Element | undefined {
+  if (hovered?.isConnected) return hovered;
+  const all = document.querySelectorAll(":hover");
+  return all[all.length - 1];
+}
+
 Widget.getCurrent()
   .window.listen<number>("fork::wheel", ({ payload: delta }) => {
-    const hovered = document.querySelectorAll(":hover");
-    hovered[hovered.length - 1]?.dispatchEvent(
+    getHovered()?.dispatchEvent(
       new WheelEvent("wheel", {
         deltaY: (-delta / WIN32_WHEEL_DELTA) * DOM_WHEEL_DELTA,
         deltaMode: WheelEvent.DOM_DELTA_PIXEL,

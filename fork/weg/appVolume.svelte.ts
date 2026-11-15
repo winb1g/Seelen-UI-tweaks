@@ -8,15 +8,16 @@
  * Hooked into upstream via a single `{@attach}` in `UserApplicationItem.svelte` (see FORK.md).
  */
 import { invoke, SeelenCommand, SeelenEvent, subscribe } from "@seelen-ui/lib";
-import type { MediaDeviceSession, UserAppWindow } from "@seelen-ui/lib/types";
+import type { MediaDevice, MediaDeviceSession, UserAppWindow } from "@seelen-ui/lib/types";
 import type { Attachment } from "svelte/attachments";
-import { lazyRune } from "libs/ui/svelte/utils";
 import type { AppOrFileWegItem } from "src/ui/svelte/weg/types.ts";
 import "./wheelBridge.ts";
 
 const VOLUME_STEP = 0.05;
-// a mouse wheel notch is ~100, touchpads send many small deltas that are accumulated
+// a mouse wheel notch is 100, touchpads send many small deltas that are accumulated up to half a notch
+const WHEEL_NOTCH_DELTA = 100;
 const WHEEL_STEP_DELTA = 50;
+const WHEEL_LINES_PER_NOTCH = 3;
 // how long a requested change is trusted over the system value, until the system reports it back
 const PENDING_TTL_MS = 1000;
 
@@ -26,9 +27,27 @@ const STRINGS = {
   noSession: "No audio session",
 };
 
-const outputs = lazyRune(async () => (await invoke(SeelenCommand.GetMediaDevices))[1]);
-subscribe(SeelenEvent.MediaOutputs, outputs.setByPayload);
-await outputs.init();
+// null until first requested, so the dock doesn't wait for (or receive) audio data it never uses
+let outputs = $state.raw<MediaDevice[] | null>(null);
+let outputsRequested = false;
+
+/** Starts tracking the audio outputs, called when the pointer first enters a dock item */
+function requestOutputs() {
+  if (outputsRequested) return;
+  outputsRequested = true;
+  subscribe(SeelenEvent.MediaOutputs, ({ payload }) => {
+    outputs = payload;
+  }).catch(console.error);
+  invoke(SeelenCommand.GetMediaDevices)
+    .then(([, devices]) => {
+      // an event may have already brought newer data
+      outputs ??= devices;
+    })
+    .catch(console.error);
+}
+
+/** Latest-wins volume requests per session: one in flight, the newest level is sent when it finishes */
+const volumeQueue = new Map<string, { next: number | null }>();
 
 interface AppAudioSession {
   deviceId: string;
@@ -62,7 +81,7 @@ export function appVolumeControls(
     }
 
     $effect(() => {
-      if (!active) return;
+      if (!active || !outputs) return;
       const session = sessions[0]?.session;
       upstreamTooltip ??= el.dataset.tooltip;
       if (!session) {
@@ -87,13 +106,17 @@ export function appVolumeControls(
       active = true;
       if (!sessions.length) return;
 
-      wheelDelta += e.deltaMode === WheelEvent.DOM_DELTA_PIXEL ? e.deltaY : e.deltaY * WHEEL_STEP_DELTA;
+      wheelDelta += e.deltaMode === WheelEvent.DOM_DELTA_PIXEL
+        ? e.deltaY
+        : (e.deltaY / WHEEL_LINES_PER_NOTCH) * WHEEL_NOTCH_DELTA;
       if (Math.abs(wheelDelta) < WHEEL_STEP_DELTA) return;
+      // one step per notch, the backend merges the notches that queue up while the dock is busy
+      const steps = Math.max(1, Math.round(Math.abs(wheelDelta) / WHEEL_NOTCH_DELTA));
       const direction = wheelDelta < 0 ? 1 : -1;
       wheelDelta = 0;
 
       const current = pendingLevel ?? sessions[0]!.session.volume;
-      pendingLevel = setAppVolume(sessions, current + direction * VOLUME_STEP);
+      pendingLevel = setAppVolume(sessions, current + direction * steps * VOLUME_STEP);
       keepPending();
     }
 
@@ -109,11 +132,13 @@ export function appVolumeControls(
       keepPending();
     }
 
+    el.addEventListener("pointerenter", requestOutputs);
     el.addEventListener("wheel", onWheel, { passive: true });
     el.addEventListener("click", onClick, { capture: true });
     el.addEventListener("pointerleave", deactivate);
 
     return () => {
+      el.removeEventListener("pointerenter", requestOutputs);
       el.removeEventListener("wheel", onWheel);
       el.removeEventListener("click", onClick, { capture: true });
       el.removeEventListener("pointerleave", deactivate);
@@ -136,7 +161,8 @@ function getAudioSessionsForItem(item: AppOrFileWegItem, windows: UserAppWindow[
   );
   const pids = new Set(windows.map((w) => w.process.id));
 
-  const devices = outputs.value.toSorted((a, b) => Number(b.isDefaultMultimedia) - Number(a.isDefaultMultimedia));
+  if (!outputs) return [];
+  const devices = outputs.toSorted((a, b) => Number(b.isDefaultMultimedia) - Number(a.isDefaultMultimedia));
 
   const result: AppAudioSession[] = [];
   for (const device of devices) {
@@ -155,11 +181,39 @@ function getAudioSessionsForItem(item: AppOrFileWegItem, windows: UserAppWindow[
 function setAppVolume(sessions: AppAudioSession[], level: number): number {
   const clamped = Math.min(1, Math.max(0, Math.round(level * 100) / 100));
   for (const { deviceId, session } of sessions) {
-    invoke(SeelenCommand.SetVolumeLevel, { deviceId, sessionId: session.id, level: clamped }).catch(
-      console.error,
-    );
+    queueVolumeLevel(deviceId, session.id, clamped);
   }
   return clamped;
+}
+
+/**
+ * Every applied level makes the backend broadcast the whole device list to every widget, so a fast wheel
+ * only sends the newest level once the previous request finished instead of one request per notch.
+ */
+function queueVolumeLevel(deviceId: string, sessionId: string, level: number) {
+  const key = `${deviceId}\0${sessionId}`;
+  const queued = volumeQueue.get(key);
+  if (queued) {
+    queued.next = level;
+    return;
+  }
+
+  const entry: { next: number | null } = { next: null };
+  volumeQueue.set(key, entry);
+  const send = (value: number) => {
+    invoke(SeelenCommand.SetVolumeLevel, { deviceId, sessionId, level: value })
+      .catch(console.error)
+      .finally(() => {
+        if (entry.next === null) {
+          volumeQueue.delete(key);
+          return;
+        }
+        const next = entry.next;
+        entry.next = null;
+        send(next);
+      });
+  };
+  send(level);
 }
 
 /** Brings all the sessions to the opposite of `currentlyMuted`, returns the new muted state */

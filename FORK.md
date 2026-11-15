@@ -113,6 +113,10 @@ hook catches the wheel over the dock (swallowing it, so the focused app doesn't 
 webview, which replays it as a normal DOM `wheel` event. Works with that Windows setting on or off. Transparent dock
 areas are click-through, so the wheel over them still reaches the apps behind.
 
+The hook only makes cheap Win32 calls: dock window handles are cached from upstream's widget status event (asking Tauri
+for a handle blocks on the main thread, and Windows silently removes a low-level hook that keeps timing out), and wheel
+notches that queue up while the dock is busy are merged into one event.
+
 ### App volume
 
 [`fork/weg/appVolume.svelte.ts`](fork/weg/appVolume.svelte.ts) — on dock app items:
@@ -120,6 +124,10 @@ areas are click-through, so the wheel over them still reaches the apps behind.
 - **Scroll** changes the app volume in 5% steps.
 - **Ctrl+click** mutes / unmutes the app (the normal click action is skipped).
 - The **tooltip** shows `Volume: N%`, `Muted` or `No audio session` while doing so, until the pointer leaves.
+
+Audio data is only loaded once the pointer first enters a dock item, so the dock doesn't wait for it at startup. A fast
+wheel keeps one volume request in flight per session and sends the newest level when it finishes, because every applied
+level makes the backend broadcast the whole device list to every widget.
 
 ### UAC prompts
 
