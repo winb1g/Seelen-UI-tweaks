@@ -133,13 +133,20 @@ Restoring the window is not enough, and restoring it through the service is refu
 still may not touch a SYSTEM window. Activation is the whole job, so the module runs a ladder, judging every step by
 re-reading the real foreground window instead of trusting a call's return value:
 
-1. `SwitchToThisWindow` — what the native taskbar button itself calls; needs no foreground permission and crosses
-   integrity levels.
+1. `SwitchToThisWindow` — in practice the only one of the three that succeeds here. It is documented as "not intended
+   for general use", so this is an observation, not a guarantee.
 2. `SvcAction::SetForeground` through the elevated service — for when Seelen is not allowed to activate it.
 
-A `SvcAction::ShowWindowAsync(SW_RESTORE)` is sent first, but only as a non-fatal hint. A prompt that can't be activated
-is retried a few times and then left alone until it is shown again, so the user can switch away from it without it
-coming back.
+A `SvcAction::ShowWindowAsync(SW_RESTORE)` is sent first, but only as a non-fatal hint.
 
-No upstream hook: it reuses the existing `SvcAction`s and the platform layer. More prompt hosts can be added to
-`PROMPT_HOSTS`; they are only matched when installed under `%SystemRoot%\System32`.
+The prompt only counts as surfaced when it is the foreground window **and not minimized**: Windows lets a minimized
+window hold the foreground while showing nothing, so checking the foreground alone would report success for a prompt the
+user still can't see.
+
+A prompt that can't be surfaced is retried in short bursts (3 attempts, 900 ms apart) and then left alone. It is retried
+again only when it asks for attention again (`HSHELL_FLASH`, the same shell message upstream already receives for its
+window-attention tracking), and never more than 12 attempts per window. Flashing stops once a prompt is activated, so
+that signal can't fire for one the user already answered; this can't become a permanent focus fight.
+
+No upstream hook: it reuses the existing `SvcAction`s, the platform layer and `subscribe_to_background_window`. More
+prompt hosts can be added to `PROMPT_HOSTS`; they are only matched when installed under `%SystemRoot%\System32`.
