@@ -1,3 +1,8 @@
+> [!IMPORTANT]
+> **This project is archived (November 2026).** I've started working on my own application and will no longer be
+> working on or maintaining this fork. There will be no further releases, fixes, or support. The source remains
+> available as-is; the original project lives at [eythaann/Seelen-UI](https://github.com/eythaann/Seelen-UI).
+
 <h1 align="center">
   <img src="documentation/images/logo.svg" width="44" align="top" alt="Seelen UI Logo" />
   Seelen UI
